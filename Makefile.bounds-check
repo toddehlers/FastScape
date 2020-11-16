@@ -1,0 +1,11 @@
+FLAGS90 = -c -O3 -fopenmp -fbounds-check -static
+F90 = gfortran
+FLAGS77 = -c -O3 -fopenmp -fbounds-check -static
+F77 = gfortran
+CC = gcc -cc=icc
+FLAGSCC = -c -O3
+
+LIBS =
+
+OPTIONS = -O3 -fopenmp
+

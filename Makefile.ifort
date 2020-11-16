@@ -1,0 +1,11 @@
+FLAGS90 = -c -O3 -openmp -Bstatic
+F90 = ifort -assume byterecl
+FLAGS77 = -c -O3 -openmp -Bstatic
+F77 = ifort -assume byterecl
+CC = icc
+FLAGSCC = -c -O3 -openmp -Bstatic
+
+LIBS =
+
+OPTIONS = -O3 -openmp -Bstatic
+

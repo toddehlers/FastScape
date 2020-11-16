@@ -1,0 +1,10 @@
+FLAGS90 = -c -O3 -fopenmp -static
+F90 = mpif90
+FLAGS77 = -c -O3 -fopenmp -static
+F77 = mpif77
+CC = mpicc
+FLAGSCC = -c -O3
+
+LIBS = 
+
+OPTIONS = -O3 -fopenmp

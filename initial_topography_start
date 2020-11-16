@@ -1,0 +1,157 @@
+subroutine initial_topography (t,p,g)
+
+! first half of the initial_topography.f90 routine which can be completed
+! by lines included in the input file
+
+! This routine is used to initialize the topography
+
+use omp_lib
+use definitions
+
+implicit none
+
+type (topography) t
+type (topology) g
+type (param) p
+
+integer i,j,ij,ij0,len,thread,seedsize,values(8)
+double precision x,y,h,xl,yl,dt
+double precision w1,w2,w3,w4,w5,w6,w7,w8,w9,w0
+integer i1,i2,i3,i4,i5,i6,i7,i8,i9,i0
+integer*2, dimension(:), allocatable :: hi2
+integer*4, dimension(:), allocatable :: hi4,seed
+real*4, dimension(:), allocatable :: hr4
+double precision, dimension(:), allocatable :: hr8,hran
+
+!___ Added by PRE Mar2019 ___!
+!___________ Start __________!
+integer :: ios, FileUnit=52, TopographyInput, k, l, kl
+character(255) :: TopographyFile
+double precision :: z_input(p%nn)
+!___________ End ____________!
+
+xl=p%xl
+yl=p%yl
+dt=p%dt
+
+if (p%restart.eq.1) then
+open (7,file=p%run//'/RESTART',status='old',access='direct',recl=48*p%nx*p%ny+8+8)
+read (7,rec=1) p%time,p%istep,p%nPecube,t%h,t%hi,t%hiso,t%hb,t%hp
+close (7)
+return
+
+elseif (p%restart.lt.0) then
+  if (p%restart.eq.-1) then
+  allocate (hi2(p%nx0*p%ny0))
+  open (7,file=p%DEM,status='old',access='direct',recl=2*p%nx0*p%ny0,convert=p%convert)
+  read (7,rec=1) hi2
+  close (7)
+!$OMP parallel num_threads(p%num_threads) shared(t,p,hi2) private(i,j,ij,ij0)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+    do j=1,p%ny
+      do i=1,p%nx
+      ij=(j-1)*p%nx+i
+      ij0=(j-1)*p%nx0+i
+      t%h(ij)=hi2(ij0)
+      enddo
+    enddo
+!$OMP end do nowait
+!$OMP end parallel
+  deallocate (hi2)
+  elseif (p%restart.eq.-2) then
+  allocate (hi4(p%nx0*p%ny0))
+  open (7,file=p%DEM,status='old',access='direct',recl=4*p%nx0*p%ny0,convert=p%convert)
+  read (7,rec=1) hi4
+  close (7)
+!$OMP parallel num_threads(p%num_threads) shared(t,p,hi4) private(i,j,ij,ij0)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+    do j=1,p%ny
+      do i=1,p%nx
+      ij=(j-1)*p%nx+i
+      ij0=(j-1)*p%nx0+i
+      t%h(ij)=hi4(ij0)
+      enddo
+    enddo
+!$OMP end do nowait
+!$OMP end parallel
+  deallocate (hi4)
+  elseif (p%restart.eq.-3) then
+  allocate (hr4(p%nx0*p%ny0))
+  open (7,file=p%DEM,status='old',access='direct',recl=4*p%nx0*p%ny0,convert=p%convert)
+  read (7,rec=1) hr4
+  close (7)
+!$OMP parallel num_threads(p%num_threads) shared(t,p,hr4) private(i,j,ij,ij0)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+    do j=1,p%ny
+      do i=1,p%nx
+      ij=(j-1)*p%nx+i
+      ij0=(j-1)*p%nx0+i
+      t%h(ij)=hr4(ij0)
+      enddo
+    enddo
+!$OMP end do nowait
+!$OMP end parallel
+  deallocate (hr4)
+  elseif (p%restart.eq.-4) then
+  allocate (hr8(p%nx0*p%ny0))
+  open (7,file=p%DEM,status='old',access='direct',recl=8*p%nx0*p%ny0,convert=p%convert)
+  read (7,rec=1) hr8
+  close (7)
+!$OMP parallel num_threads(p%num_threads) shared(t,p,hr8) private(i,j,ij,ij0)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+    do j=1,p%ny
+      do i=1,p%nx
+      ij=(j-1)*p%nx+i
+      ij0=(j-1)*p%nx0+i
+      t%h(ij)=hr8(ij0)
+      enddo
+    enddo
+!$OMP end do nowait
+!$OMP end parallel
+  deallocate (hr8)
+  else
+  print*,'restart option ',p%restart,' not implemented yet'
+  stop
+  endif
+
+elseif (p%restart.eq.0) then
+
+len=p%nn/p%num_threads+1
+!$OMP parallel shared(t,p,len) private(hran,thread,seed,values)
+call date_and_time(values=values)
+call random_seed(size=seedsize)
+allocate(seed(1:seedsize))
+thread=omp_get_thread_num()
+seed(:) = values(8)+thread
+call random_seed(put=seed)
+allocate (hran(len))
+call random_number (hran)
+t%h(1+thread*len:min(p%nn,(thread+1)*len))=hran
+deallocate (hran)
+!$OMP end parallel
+
+!call random_number (t%h)
+
+  if (p%initial_topography_n.ne.-1) then
+
+!$OMP parallel num_threads(p%num_threads) shared(t,p) private(i,j,ij,x,y,h)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+  do j=1,p%ny
+    do i=1,p%nx
+    ij=i+(j-1)*p%nx
+!      if (.not.g%bc(ij)) then
+      x=p%xl*float(i-1)/(p%nx-1)
+      y=p%yl*float(j-1)/(p%ny-1)
+      call interpolate (x/p%xl*2.d0-1.d0,y/p%yl*2.d0-1.d0, &
+                        p%initial_topography_n,p%initial_topography_v, &
+                        h)
+      t%h(ij)=t%h(ij)+h
+!      endif
+    enddo
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+  else
+
+

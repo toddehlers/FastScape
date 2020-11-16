@@ -1,0 +1,59 @@
+!$OMP parallel num_threads(p%num_threads) shared(t,p,g,dt,xl,yl) &
+!$OMP private(k,l,kl,i,j,ij,x,y,h,w1,w2,w3,w4,w5,w6,w7,w8,w9,w0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i0)
+!$OMP do  schedule(dynamic,p%ny/p%num_threads)
+
+  do j=1,p%ny
+    do i=1,p%nx
+    ij=i+(j-1)*p%nx
+!      if (.not.g%bc(ij)) then
+      x=p%xl*float(i-1)/(p%nx-1)
+      y=p%yl*float(j-1)/(p%ny-1)
+      h=500.d0
+
+      !___ Added by PRE Mar2019 ___!
+      !___________ Start __________!
+      !$omp critical
+      if (TopographyInput.eq.1 .and. i.eq.1 .and. j.eq.1) then
+        open(FileUnit,file=p%run//TopographyFile,status='old',iostat=ios)
+          do l=1,p%ny
+            do k=1,p%nx
+            kl=k+(l-1)*p%nx
+            read(FileUnit, *, iostat=ios) z_input(kl)
+          enddo
+        enddo
+      end if
+      h = z_input(ij)
+
+      !$omp end critical
+      !___________ End ____________!
+      t%h(ij)=t%h(ij)+h
+!      endif
+    enddo
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+  endif
+
+else
+
+print*,'restart option ',p%restart,' not implemented'
+stop
+endif
+
+!$OMP parallel shared(t)
+!$OMP workshare
+t%hi=t%h
+t%href=t%h
+t%hi_iso=t%h
+t%hb=t%h
+t%hp=t%h
+t%hiso=0.d0
+!$OMP end workshare nowait
+!$OMP end parallel
+
+if (p%reference_surface.eq.0) t%href=0.
+
+return
+
+end subroutine initial_topography

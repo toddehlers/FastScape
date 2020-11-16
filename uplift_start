@@ -1,0 +1,91 @@
+subroutine uplift_rate (t,p,g)
+
+use omp_lib
+use definitions
+
+implicit none
+
+type (topography) t
+type (topology) g
+type (param) p
+
+integer i,j,ij
+double precision x,y,time,dh,uplift,xl,yl,val_t,rat,dt
+double precision w1,w2,w3,w4,w5,w6,w7,w8,w9,w0
+integer i1,i2,i3,i4,i5,i6,i7,i8,i9,i0
+
+! Adding advection parameters
+double precision, dimension(:), allocatable :: diag,sup,inf,rhs,res
+double precision vx_input(p%nn),vy_input(p%nn),vz_input(p%nn),h_advect(p%nx,p%ny)
+double precision vx(p%nx,p%ny),vy(p%nx,p%ny),vz(p%nx,p%ny)
+double precision hi_advect(p%nx,p%ny),hi_iso_advect(p%nx,p%ny),href_advect(p%nx,p%ny),hb_advect(p%nx,p%ny)
+character cbc*4
+
+! Adding velocity interface
+integer :: VelocityInput, FileUnit = 392, LineCounter, ios, NumberOfVelocityFiles
+character(255) VelocityFile
+character(255), dimension(:), allocatable :: VelocityFiles
+double precision, dimension(:), allocatable :: InputTimeStep, TimeStep
+double precision TimeSpan, RegionalUplift
+
+time=p%time
+xl=p%xl
+yl=p%yl
+dt=p%dt
+
+if (p%uplift_n.ne.-1) then
+
+  if (p%uplift_nt.eq.0) then
+  val_t=1.d0
+  elseif (p%time.lt.p%uplift_t(1)) then
+  val_t=p%uplift_f(1)
+  elseif (p%time.gt.p%uplift_t(p%uplift_nt)) then
+  val_t=p%uplift_f(p%uplift_nt)
+  else
+    do i=1,p%uplift_nt-1
+      if ((p%time-p%uplift_t(i))*(p%time-p%uplift_t(i+1)).le.0.d0) then
+        if (abs(p%uplift_t(i)-p%uplift_t(i+1)).lt.tiny(x)) then
+        val_t=(p%uplift_f(i)+p%uplift_f(i+1))/2.d0
+        else
+        rat=(p%time-p%uplift_t(i))/(p%uplift_t(i)-p%uplift_t(i+1))
+        val_t=p%uplift_f(i)+rat*(p%uplift_f(i+1)-p%uplift_f(i))
+        endif
+      endif
+    enddo
+  endif
+!$OMP parallel num_threads(p%num_threads) shared(t,p,g,val_t) private (i,j,ij,x,y,uplift,dh)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+  do j=1,p%ny
+    do i=1,p%nx
+    ij=i+(j-1)*p%nx
+      if (.not.g%bc(ij)) then
+      x=p%xl*float(i-1)/(p%nx-1)
+      y=p%yl*float(j-1)/(p%ny-1)
+      call interpolate (x/p%xl*2.d0-1.d0,y/p%yl*2.d0-1.d0, &
+                        p%uplift_n,p%uplift_v,uplift)
+      dh=uplift*p%dt*val_t
+      t%u(ij)=uplift
+      t%h(ij)=t%h(ij)+dh
+      t%hb(ij)=t%hb(ij)+dh
+      t%hi(ij)=t%hi(ij)+dh
+      t%href(ij)=t%href(ij)+dh
+      if (p%refflex) t%hi_iso(ij)=t%hi_iso(ij)+dh
+      endif
+    enddo
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+else
+
+!$OMP parallel shared(t,p,g,time,xl,yl,dt)
+!$OMP do private (i,j,ij,x,y,uplift,dh,w1,w2,w3,w4,w5,w6,w7,w8,w9,w0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i0) &
+!$OMP schedule(dynamic,p%ny/p%num_threads)
+  do j=1,p%ny
+    do i=1,p%nx
+    ij=i+(j-1)*p%nx
+      if (.not.g%bc(ij)) then
+      x=p%xl*float(i-1)/(p%nx-1)
+      y=p%yl*float(j-1)/(p%ny-1)
+      !uplift=5.d-3
+! user supplied

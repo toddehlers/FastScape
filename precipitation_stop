@@ -1,0 +1,11 @@
+    t%discharge(ij)=precipitation*p%dx*p%dy
+    enddo
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+endif
+
+return
+
+end subroutine precipitation_function

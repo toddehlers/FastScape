@@ -1,0 +1,269 @@
+!user supplied dynamic topography end
+flex(i,j)=h*drho*ddxf*ddyf
+enddo
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+if (ddxf.lt.dx) then
+
+!$OMP parallel shared(flex,ddxf,ddyf,drho,p,xfmin,yfmin,jflexmin,jflexmax,iflexmin,iflexmax,iref) &
+!$OMP private(i,j,k,dist,xloc,yloc,ii,jj,r,s,h1,h2,h3,h4,hh,hh0,drhoe)
+!$OMP do schedule(dynamic)
+do j=jflexmin,jflexmax
+yloc=((j-1)*ddyf+yfmin)
+jj=1+(p%ny-1)*yloc/p%yl
+jj=min(jj,p%ny-1)
+jj=max(1,jj)
+do i=iflexmin,iflexmax
+xloc=((i-1)*ddxf+xfmin)
+ii=1+(p%nx-1)*xloc/p%xl
+ii=min(ii,p%nx-1)
+ii=max(1,ii)
+r=(xloc-(ii-1)*p%dx)/p%dx*2.-1.
+s=(yloc-(jj-1)*p%dy)/p%dy*2.-1.
+h1=t%h(ii+(jj-1)*p%nx)
+h2=t%h(ii+1+(jj-1)*p%nx)
+h3=t%h(ii+(jj)*p%nx)
+h4=t%h(ii+1+(jj)*p%nx)
+hh=((1.-r)*(1.-s)*h1+(1.+r)*(1.-s)*h2+(1.-r)*(1.+s)*h3+(1.+r)*(1.+s)*h4)/4.
+h1=t%hi_iso(ii+(jj-1)*p%nx)
+h2=t%hi_iso(ii+1+(jj-1)*p%nx)
+h3=t%hi_iso(ii+(jj)*p%nx)
+h4=t%hi_iso(ii+1+(jj)*p%nx)
+hh0=iref*((1.-r)*(1.-s)*h1+(1.+r)*(1.-s)*h2+(1.-r)*(1.+s)*h3+(1.+r)*(1.+s)*h4)/4.
+drhoe=drho
+  do k=1,p%granite_n
+  dist=sqrt((xloc-p%granite_x(k))**2/p%granite_rx(k)**2+(yloc-p%granite_y(k))**2/p%granite_ry(k)**2)
+  if (dist.lt.1.d0.and. &
+      hh0-hh.ge.p%granite_top(k).and.hh0-hh.le.p%granite_bottom(k)) drhoe=drho+p%granite_drho(k)*9.81d0
+  enddo
+flex(i,j)=flex(i,j)-(hh-hh0)*drhoe*ddxf*ddyf
+enddo
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+else
+
+allocate (nfl(nflex,nflex),fl(nflex,nflex))
+nfl=0
+fl=0.d0
+!$OMP parallel shared(fl,nfl,p,t,ddxf,ddyf,xfmin,yfmin,iref) private(i,j,xloc,yloc,ii,jj)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+  do j=1,p%ny
+  yloc=p%dy*(j-1)+ddyf/2.d0
+  jj=1+(yloc-yfmin)/ddyf
+    do i=1,p%nx
+    xloc=p%dx*(i-1)+ddxf/2.d0
+    ii=1+(xloc-xfmin)/ddxf
+    fl(ii,jj)=fl(ii,jj)+t%h(i+(j-1)*p%nx)-iref*t%hi_iso(i+(j-1)*p%nx)
+    nfl(ii,jj)=nfl(ii,jj)+1
+    enddo
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+!$OMP parallel shared(flex,fl,nfl,ddxf,ddyf,drho,p,xfmin,yfmin,jflexmin,jflexmax,iflexmin,iflexmax) &
+!$OMP private(i,j,xloc,yloc,ii,jj,r,s,h1,h2,h3,h4,hh,hh0,drhoe,k,dist)
+!$OMP do schedule(dynamic)
+do j=jflexmin,jflexmax
+yloc=((j-1)*ddyf+yfmin)
+jj=1+(p%ny-1)*yloc/p%yl
+jj=min(jj,p%ny-1)
+jj=max(1,jj)
+do i=iflexmin,iflexmax
+xloc=((i-1)*ddxf+xfmin)
+ii=1+(p%nx-1)*xloc/p%xl
+ii=min(ii,p%nx-1)
+ii=max(1,ii)
+r=(xloc-(ii-1)*p%dx)/p%dx*2.-1.
+s=(yloc-(jj-1)*p%dy)/p%dy*2.-1.
+h1=t%h(ii+(jj-1)*p%nx)
+h2=t%h(ii+1+(jj-1)*p%nx)
+h3=t%h(ii+(jj)*p%nx)
+h4=t%h(ii+1+(jj)*p%nx)
+hh=((1.-r)*(1.-s)*h1+(1.+r)*(1.-s)*h2+(1.-r)*(1.+s)*h3+(1.+r)*(1.+s)*h4)/4.
+h1=t%hi(ii+(jj-1)*p%nx)
+h2=t%hi(ii+1+(jj-1)*p%nx)
+h3=t%hi(ii+(jj)*p%nx)
+h4=t%hi(ii+1+(jj)*p%nx)
+hh0=iref*((1.-r)*(1.-s)*h1+(1.+r)*(1.-s)*h2+(1.-r)*(1.+s)*h3+(1.+r)*(1.+s)*h4)/4.
+drhoe=drho
+  do k=1,p%granite_n
+  dist=sqrt((xloc-p%granite_x(k))**2/p%granite_rx(k)**2+(yloc-p%granite_y(k))**2/p%granite_ry(k)**2)
+  if (dist.lt.1.d0.and. &
+      hh0-hh.ge.p%granite_top(k).and.hh0-hh.le.p%granite_bottom(k)) drhoe=drho+p%granite_drho(k)*9.81d0
+  enddo
+if (nfl(i,j).ne.0) flex(i,j)=flex(i,j)-fl(i,j)/nfl(i,j)*drhoe*ddxf*ddyf
+enddo
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+deallocate (nfl,fl)
+
+
+endif
+
+if (ixflex.eq.0) then
+!$OMP parallel shared(flex,nflex,iflexmin,iflexmax) private(j,fmean)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do j=1,nflex
+  fmean=sum(flex(iflexmin:iflexmax,j))/(iflexmax-iflexmin)
+  flex(1:nflex,j)=fmean
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+endif
+
+if (iyflex.eq.0) then
+!$OMP parallel shared(flex,nflex,jflexmin,jflexmax) private(i,fmean)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do i=1,nflex
+  fmean=sum(flex(i,jflexmin:jflexmax))/(jflexmax-jflexmin)
+  flex(i,1:nflex)=fmean
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+endif
+
+!$OMP parallel shared(flex,nflex) private(j)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+do j=1,nflex
+call sinft (flex(:,j),nflex)
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+!$OMP parallel shared(work,flex)
+!$OMP workshare
+work=transpose(flex)
+!$OMP end workshare nowait
+!$OMP end parallel
+
+!$OMP parallel shared(work,nflex) private(i)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+do i=1,nflex
+call sinft (work(:,i),nflex)
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+!$OMP parallel shared(work,hx)
+!$OMP workshare
+work=work*4./hx/hx
+!$OMP end workshare nowait
+!$OMP end parallel
+
+pi=3.141592654
+pihx=pi/hx
+!$OMP parallel shared(work,xk,pihx,d,nflex,ixflex,iyflex) private(i,j,fi,fj,tij)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+do j=1,nflex
+fj=(j*pihx)**2*iyflex
+  do i=1,nflex
+  fi=(i*pihx)**2*ixflex
+  tij=d/xk*(fi**2+2.*fi*fj+fj**2)+1.d0
+  work(j,i)=work(j,i)/xk/tij
+  enddo
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+!$OMP parallel shared(work,nflex) private(i)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+do i=1,nflex
+call sinft (work(:,i),nflex)
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+!$OMP parallel shared(work,flex)
+!$OMP workshare
+flex=transpose(work)
+!$OMP end workshare nowait
+!$OMP end parallel
+
+!$OMP parallel shared(flex,nflex) private(j)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+do j=1,nflex
+call sinft (flex(:,j),nflex)
+enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+if (ixflex.eq.0) then
+iflexfirst=1+(nflex-1)*(0.-xfmin)/dxf
+!$OMP parallel shared(flex,nflex,iflexfirst) private(j)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do j=1,nflex
+  flex(iflexfirst,j)=flex(iflexfirst+1,j)
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+iflexlast=1+(nflex-1)*(p%xl-xfmin)/dxf
+!$OMP parallel shared(flex,nflex,iflexlast) private(j)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do j=1,nflex
+  flex(iflexlast,j)=flex(iflexlast-1,j)
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+endif
+
+if (iyflex.eq.0) then
+jflexfirst=1+(nflex-1)*(0.-yfmin)/dyf
+!$OMP parallel shared(flex,nflex,jflexfirst) private(i)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do i=1,nflex
+  flex(i,jflexfirst)=flex(i,jflexfirst+1)
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+jflexlast=1+(nflex-1)*(p%yl-yfmin)/dyf
+!$OMP parallel shared(flex,nflex,jflexlast) private(i)
+!$OMP do schedule(dynamic,nflex/p%num_threads)
+  do i=1,nflex
+  flex(i,jflexlast)=flex(i,jflexlast-1)
+  enddo
+!$OMP end do nowait
+!$OMP end parallel
+endif
+
+!$OMP parallel shared(t,p,g,dxf,dyf,xfmin,yfmin,ddxf,ddyf,nflex) private(i,j,ij,xp,yp,iflex,jflex,xflex,rx,yflex,ry,hisotot,dh)
+!$OMP do schedule(dynamic,p%ny/p%num_threads)
+      do j=1,p%ny
+        do i=1,p%nx
+        ij=i+(j-1)*p%nx
+          if (.not.g%bc(ij)) then
+          xp=p%xl*float(i-1)/(p%nx-1)
+          yp=p%yl*float(j-1)/(p%ny-1)
+          iflex=1+(nflex-1)*(xp-xfmin)/dxf
+          jflex=1+(nflex-1)*(yp-yfmin)/dyf
+          xflex=(iflex-1)*ddxf+xfmin
+          rx=(xp-xflex)/ddxf*2.d0-1.d0
+          yflex=(jflex-1)*ddyf+yfmin
+          ry=(yp-yflex)/ddyf*2.d0-1.d0
+          hisotot=(flex(iflex,jflex)*(1.d0-rx)*(1.d0-ry)/4.d0 &
+                 +flex(iflex+1,jflex)*(1.d0+rx)*(1.d0-ry)/4.d0 &
+                 +flex(iflex+1,jflex+1)*(1.d0+rx)*(1.d0+ry)/4.d0 &
+                 +flex(iflex,jflex+1)*(1.d0-rx)*(1.d0+ry)/4.d0)
+          dh=hisotot-t%hiso(ij)
+          t%hiso(ij)=hisotot
+          t%h(ij)=t%h(ij)+dh
+          t%hb(ij)=t%hb(ij)+dh
+          t%hi(ij)=t%hi(ij)+dh
+          t%href(ij)=t%href(ij)+dh
+          t%hi_iso(ij)=t%hi_iso(ij)+dh
+          t%u(ij)=t%u(ij)+dh/p%dt
+          endif
+!        t%hi_iso(ij)=t%hi_iso(ij)+dh
+        enddo
+      enddo
+!$OMP end do nowait
+!$OMP end parallel
+
+deallocate (flex,work,junk)
+
+end subroutine flexure
